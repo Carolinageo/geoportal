@@ -3,151 +3,732 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Geoportal Educativo</title>
+    <title>Geoportal Ministerio de Educación</title>
+    <!-- Leaflet CSS -->
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    <!-- Font Awesome para iconos -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <style>
-        * {
+        :root {
+            /* Colores institucionales Ministerio de Educación Ecuador */
+            --medu-primary: #005C29; /* Verde oscuro institucional */
+            --medu-secondary: #F9A825; /* Amarillo institucional */
+            --medu-accent: #D32F2F; /* Rojo institucional */
+            --medu-light: #E8F5E9; /* Verde claro */
+            --medu-dark: #00251A; /* Verde muy oscuro */
+        }
+        
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
             margin: 0;
             padding: 0;
-            box-sizing: border-box;
-        }
-
-        body {
-            font-family: 'Arial', sans-serif;
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-            min-height: 100vh;
+            height: 100vh;
             display: flex;
-            justify-content: center;
+            flex-direction: column;
+            color: #333;
+        }
+        
+        .header {
+            background: white;
+            color: var(--medu-primary);
+            padding: 15px 20px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+            display: flex;
             align-items: center;
-            color: white;
+            justify-content: space-between;
+            border-bottom: 3px solid var(--medu-primary);
         }
-
-        .container {
-            text-align: center;
-            background: rgba(255, 255, 255, 0.1);
-            padding: 3rem;
-            border-radius: 20px;
-            backdrop-filter: blur(10px);
-            border: 1px solid rgba(255, 255, 255, 0.2);
-            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.1);
-            max-width: 600px;
-            margin: 20px;
-        }
-
-        h1 {
-            font-size: 3rem;
-            margin-bottom: 1rem;
-            text-shadow: 2px 2px 4px rgba(0, 0, 0, 0.3);
-            animation: fadeInUp 1s ease-out;
-        }
-
-        .subtitle {
-            font-size: 1.3rem;
-            margin-bottom: 2rem;
-            opacity: 0.9;
-            animation: fadeInUp 1s ease-out 0.3s both;
-        }
-
-        .description {
-            font-size: 1.1rem;
-            line-height: 1.6;
-            margin-bottom: 2rem;
-            animation: fadeInUp 1s ease-out 0.6s both;
-        }
-
-        .icon {
-            font-size: 4rem;
-            margin-bottom: 1rem;
-            animation: bounce 2s infinite;
-        }
-
-        .features {
+        
+        .header h1 {
+            margin: 0;
+            font-size: 24px;
             display: flex;
-            justify-content: space-around;
-            flex-wrap: wrap;
-            gap: 1rem;
-            margin-top: 2rem;
+            align-items: center;
+            gap: 10px;
+            color: var(--medu-primary);
+            font-weight: 600;
         }
-
-        .feature {
-            background: rgba(255, 255, 255, 0.1);
-            padding: 1rem;
-            border-radius: 10px;
+        
+        .logo {
+            height: 40px;
+        }
+        
+        .main-container {
+            display: flex;
             flex: 1;
-            min-width: 150px;
-            animation: fadeInUp 1s ease-out 0.9s both;
+            height: calc(100vh - 70px);
         }
-
-        .feature-icon {
-            font-size: 2rem;
-            margin-bottom: 0.5rem;
+        
+        .sidebar {
+            width: 320px;
+            background: #f8f9fa;
+            border-right: 1px solid #e0e6ed;
+            overflow-y: auto;
+            padding: 15px;
+            display: flex;
+            flex-direction: column;
         }
-
-        @keyframes fadeInUp {
-            from {
-                opacity: 0;
-                transform: translateY(30px);
-            }
-            to {
-                opacity: 1;
-                transform: translateY(0);
-            }
+        
+        .sidebar-header {
+            padding-bottom: 15px;
+            border-bottom: 1px solid #e0e6ed;
+            margin-bottom: 15px;
         }
-
-        @keyframes bounce {
-            0%, 20%, 50%, 80%, 100% {
-                transform: translateY(0);
-            }
-            40% {
-                transform: translateY(-10px);
-            }
-            60% {
-                transform: translateY(-5px);
-            }
+        
+        .map-container {
+            flex: 1;
+            position: relative;
         }
-
+        
+        #map {
+            height: 100%;
+            width: 100%;
+        }
+        
+        .layer-list {
+            flex: 1;
+            overflow-y: auto;
+        }
+        
+        .layer-item {
+            background: white;
+            border: 1px solid #e0e6ed;
+            border-radius: 8px;
+            padding: 12px;
+            margin-bottom: 10px;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+        
+        .layer-item:hover {
+            background: #f1f8e9;
+            border-color: #c8e6c9;
+        }
+        
+        .layer-item.active {
+            background: #e8f5e9;
+            border-color: var(--medu-primary);
+            box-shadow: 0 0 0 2px rgba(0,92,41,0.1);
+        }
+        
+        .layer-header {
+            display: flex;
+            align-items: center;
+            margin-bottom: 5px;
+        }
+        
+        .layer-toggle {
+            margin-right: 10px;
+            width: 18px;
+            height: 18px;
+            cursor: pointer;
+        }
+        
+        .layer-color {
+            width: 16px;
+            height: 16px;
+            border-radius: 3px;
+            margin-right: 10px;
+            flex-shrink: 0;
+        }
+        
+        .layer-name {
+            font-weight: 600;
+            flex: 1;
+            color: var(--medu-dark);
+        }
+        
+        .layer-info {
+            display: flex;
+            justify-content: space-between;
+            font-size: 13px;
+            color: #666;
+            margin-top: 5px;
+        }
+        
+        .loading {
+            padding: 20px;
+            text-align: center;
+            color: #666;
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+        }
+        
+        .loading i {
+            font-size: 24px;
+            margin-bottom: 10px;
+            color: var(--medu-primary);
+            animation: spin 1s linear infinite;
+        }
+        
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+        
+        .status-indicator {
+            display: flex;
+            align-items: center;
+            margin-bottom: 15px;
+            font-size: 14px;
+            background: #f5f5f5;
+            padding: 8px 12px;
+            border-radius: 20px;
+        }
+        
+        .status-dot {
+            width: 10px;
+            height: 10px;
+            border-radius: 50%;
+            margin-right: 8px;
+            background: #dc3545;
+        }
+        
+        .status-dot.connected {
+            background: var(--medu-primary);
+        }
+        
+        .map-controls {
+            position: absolute;
+            top: 15px;
+            right: 15px;
+            z-index: 1000;
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+        }
+        
+        .map-control {
+            background: white;
+            border: none;
+            width: 40px;
+            height: 40px;
+            border-radius: 50%;
+            box-shadow: 0 2px 5px rgba(0,0,0,0.2);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
+            color: var(--medu-primary);
+            transition: all 0.2s;
+        }
+        
+        .map-control:hover {
+            background: var(--medu-light);
+            transform: scale(1.05);
+        }
+        
+        .legend {
+            position: absolute;
+            bottom: 20px;
+            right: 20px;
+            z-index: 1000;
+            background: white;
+            padding: 15px;
+            border-radius: 8px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+            max-width: 200px;
+        }
+        
+        .legend h4 {
+            margin: 0 0 10px 0;
+            color: var(--medu-primary);
+            font-size: 14px;
+        }
+        
+        .legend-item {
+            display: flex;
+            align-items: center;
+            margin-bottom: 5px;
+            font-size: 13px;
+        }
+        
+        .legend-color {
+            width: 15px;
+            height: 15px;
+            border-radius: 3px;
+            margin-right: 8px;
+            flex-shrink: 0;
+        }
+        
         @media (max-width: 768px) {
-            h1 {
-                font-size: 2rem;
-            }
-            .subtitle {
-                font-size: 1.1rem;
-            }
-            .container {
-                padding: 2rem;
-            }
-            .features {
+            .main-container {
                 flex-direction: column;
+            }
+            
+            .sidebar {
+                width: 100%;
+                height: 250px;
+            }
+            
+            .map-controls {
+                top: auto;
+                bottom: 15px;
+                right: 15px;
+                flex-direction: row;
             }
         }
     </style>
 </head>
 <body>
-    <div class="container">
-        <div class="icon">🌎</div>
-        <h1>¡Hola Mundo!</h1>
-        <p class="subtitle">Bienvenidos a mi Geoportal Educativo</p>
-        
-        <div class="description">
-            <p>Este es mi sistema de información geográfica dedicado a la gestión de riesgos y planificación educativa. Aquí podrás explorar mapas interactivos, analizar datos espaciales y obtener información valiosa para la toma de decisiones.</p>
-        </div>
+    <div class="header">
+        <h1>
+            <img src="https://carolinageo.github.io/geoportal/Logo.png" alt="LOGO" class="logo">
+            GEOPORTAL 
+        </h1>
+    </div>
 
-        <div class="features">
-            <div class="feature">
-                <div class="feature-icon">🏫</div>
-                <h3>Instituciones</h3>
-                <p>Mapeo de centros educativos</p>
+    <div class="main-container">
+        <div class="sidebar">
+            <div class="sidebar-header">
+                <h3>Capas Disponibles</h3>
+                <div class="status-indicator">
+                    <div class="status-dot" id="statusDot"></div>
+                    <span id="statusText">Conectando...</span>
+                </div>
             </div>
-            <div class="feature">
-                <div class="feature-icon">🚨</div>
-                <h3>Riesgos</h3>
-                <p>Análisis de amenazas naturales</p>
+            
+            <div class="layer-list" id="layersList">
+                <div class="loading">
+                    <i class="fas fa-spinner"></i>
+                    <p>Cargando capas disponibles...</p>
+                </div>
             </div>
-            <div class="feature">
-                <div class="feature-icon">🏠</div>
-                <h3>Albergues</h3>
-                <p>Refugios de emergencia</p>
+        </div>
+        
+        <div class="map-container">
+            <div id="map"></div>
+            
+            <div class="map-controls">
+                <button class="map-control" title="Zoom inicial" onclick="resetView()">
+                    <i class="fas fa-home"></i>
+                </button>
+                <button class="map-control" title="Ver todas las capas" onclick="zoomToAllLayers()">
+                    <i class="fas fa-expand"></i>
+                </button>
+            </div>
+            
+            <div class="legend" id="legend">
+                <h4><i class="fas fa-map"></i> Leyenda</h4>
+                <div id="legendContent"></div>
             </div>
         </div>
     </div>
+
+    <!-- Leaflet JS -->
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    <script>
+        // Credenciales ocultas
+        const SUPABASE_CONFIG = {
+            URL: 'https://uskcdoforrasgrmxofml.supabase.co',
+            KEY: 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InVza2Nkb2ZvcnJhc2dybXhvZm1sIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTI4NzM5OTYsImV4cCI6MjA2ODQ0OTk5Nn0.QblnooQTKu0bIGdXJ9yLnZeUDKhUv1o99Islz8Bf2Es'
+        };
+
+        // Variables globales
+        let map;
+        let layers = {};
+        let currentZoom = 12;
+        
+        // Paleta de colores institucionales MEdu con variaciones
+        const TABLE_COLORS = {
+            'instituciones': '#005C29',  // Verde principal
+            'aulas': '#F9A825',         // Amarillo
+            'laboratorios': '#D32F2F',  // Rojo
+            'bibliotecas': '#00796B',   // Verde azulado
+            'deportivos': '#0288D1',    // Azul
+            'administrativos': '#7B1FA2', // Morado
+            'rutas': '#E65100',        // Naranja
+            'docentes': '#5D4037',     // Marrón
+            'estudiantes': '#C2185B',   // Rosado
+            'circuitos': '#689F38'     // Verde claro
+        };
+
+        // Inicialización del mapa
+        function initMap() {
+            // Coordenadas centradas en Ecuador
+            map = L.map('map').setView([-0.18303510643940463, -78.48376403749427], 12);
+            
+            L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+                attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'
+            }).addTo(map);
+            
+            // Escuchar eventos de zoom para recargar datos dinámicamente
+            map.on('zoomend moveend', function() {
+                const newZoom = map.getZoom();
+                if (Math.abs(newZoom - currentZoom) >= 1) {
+                    currentZoom = newZoom;
+                    reloadVisibleLayers();
+                }
+            });
+            
+            updateStatus('Mapa inicializado', true);
+        }
+
+        // Función para actualizar el estado de conexión
+        function updateStatus(message, isConnected = false) {
+            const statusDot = document.getElementById('statusDot');
+            const statusText = document.getElementById('statusText');
+            
+            statusText.textContent = message;
+            statusDot.className = 'status-dot';
+            
+            if (isConnected) {
+                statusDot.classList.add('connected');
+            }
+        }
+
+        // Función para cargar las tablas disponibles
+        async function loadTables() {
+            try {
+                updateStatus('Conectando con Supabase...');
+                
+                // Introspección GraphQL para obtener tablas
+                const gql = `{
+                    __schema {
+                        queryType { fields { name } }
+                    }
+                }`;
+
+                const res = await fetch(`${SUPABASE_CONFIG.URL}/graphql/v1`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'apikey': SUPABASE_CONFIG.KEY,
+                        'Authorization': `Bearer ${SUPABASE_CONFIG.KEY}`
+                    },
+                    body: JSON.stringify({ query: gql })
+                });
+
+                if (!res.ok) throw new Error('Error de conexión');
+                
+                const { data } = await res.json();
+                const fields = data.__schema.queryType.fields.map(f => f.name);
+                
+                // Filtrar tablas que terminan en "Collection"
+                const candidates = fields
+                    .filter(n => n.endsWith('Collection'))
+                    .map(n => n.slice(0, -'Collection'.length));
+
+                if (candidates.length === 0) {
+                    throw new Error('No se encontraron tablas');
+                }
+
+                // Validar tablas accesibles
+                const validTables = [];
+                await Promise.all(candidates.map(async tbl => {
+                    try {
+                        const r = await fetch(`${SUPABASE_CONFIG.URL}/rest/v1/${tbl}?select=*&limit=1`, {
+                            headers: { 
+                                'apikey': SUPABASE_CONFIG.KEY, 
+                                'Authorization': `Bearer ${SUPABASE_CONFIG.KEY}` 
+                            }
+                        });
+                        if (r.ok) validTables.push(tbl);
+                    } catch {}
+                }));
+
+                if (validTables.length === 0) {
+                    throw new Error('No hay tablas accesibles');
+                }
+
+                updateStatus(`${validTables.length} tablas disponibles`, true);
+                displayTables(validTables);
+                
+            } catch (err) {
+                updateStatus('Error: ' + err.message, false);
+                console.error(err);
+            }
+        }
+
+        // Mostrar tablas en el sidebar
+        function displayTables(tables) {
+            const layersList = document.getElementById('layersList');
+            layersList.innerHTML = '';
+
+            tables.forEach(table => {
+                // Normalizar nombre de tabla para coincidir con colores
+                const normalizedName = table.toLowerCase().replace(/\s+/g, '_');
+                
+                const layerItem = document.createElement('div');
+                layerItem.className = 'layer-item';
+                layerItem.dataset.tableName = table;
+                
+                // Asignar color basado en el nombre de la tabla o uno generado
+                const color = TABLE_COLORS[normalizedName] || generateColor(table);
+                
+                layerItem.innerHTML = `
+                    <div class="layer-header">
+                        <input type="checkbox" class="layer-toggle" checked 
+                               onclick="toggleLayer('${table}', this.checked)">
+                        <div class="layer-color" style="background-color: ${color}"></div>
+                        <div class="layer-name">${formatTableName(table)}</div>
+                    </div>
+                    <div class="layer-info">
+                        <span class="feature-count">0 elementos</span>
+                        <i class="fas fa-layer-group"></i>
+                    </div>
+                `;
+                
+                layersList.appendChild(layerItem);
+            });
+            
+            updateLegend();
+        }
+
+        // Formatear nombres de tablas para mostrar
+        function formatTableName(tableName) {
+            return tableName
+                .replace(/_/g, ' ')
+                .replace(/(?:^|\s)\S/g, a => a.toUpperCase());
+        }
+
+        // Generar color consistente basado en el nombre de la tabla
+        function generateColor(tableName) {
+            // Hash simple para generar color consistente
+            let hash = 0;
+            for (let i = 0; i < tableName.length; i++) {
+                hash = tableName.charCodeAt(i) + ((hash << 5) - hash);
+            }
+            
+            // Usar colores institucionales como base
+            const colors = [
+                '#005C29', '#F9A825', '#D32F2F', '#00796B', 
+                '#0288D1', '#7B1FA2', '#E65100', '#5D4037'
+            ];
+            
+            return colors[Math.abs(hash) % colors.length];
+        }
+
+        // Alternar visibilidad de capa
+        function toggleLayer(tableName, isActive) {
+            const layerItem = document.querySelector(`.layer-item[data-table-name="${tableName}"]`);
+            
+            if (isActive) {
+                layerItem.classList.add('active');
+                if (!layers[tableName]) {
+                    loadLayerData(tableName);
+                } else {
+                    map.addLayer(layers[tableName].layer);
+                    updateLegend();
+                }
+            } else {
+                layerItem.classList.remove('active');
+                if (layers[tableName]) {
+                    map.removeLayer(layers[tableName].layer);
+                    updateLegend();
+                }
+            }
+        }
+
+        // Recargar capas visibles cuando cambia el zoom
+        function reloadVisibleLayers() {
+            const activeCheckboxes = document.querySelectorAll('.layer-toggle:checked');
+            activeCheckboxes.forEach(checkbox => {
+                const layerItem = checkbox.closest('.layer-item');
+                const tableName = layerItem.dataset.tableName;
+                if (layers[tableName]) {
+                    loadLayerData(tableName);
+                }
+            });
+        }
+
+        // Calcular límite de elementos basado en el zoom
+        function getDataLimit() {
+            const zoom = map.getZoom();
+            if (zoom >= 15) return 5000; // Zoom muy cercano - más elementos
+            if (zoom >= 13) return 2000; // Zoom medio - cantidad moderada
+            if (zoom >= 11) return 1000; // Zoom lejano - menos elementos
+            return 500; // Zoom muy lejano - mínimos elementos
+        }
+
+        // Cargar datos de una capa específica
+        async function loadLayerData(tableName) {
+            try {
+                updateStatus(`Cargando ${tableName}...`, true);
+                
+                const layerItem = document.querySelector(`.layer-item[data-table-name="${tableName}"]`);
+                const normalizedName = tableName.toLowerCase().replace(/\s+/g, '_');
+                const color = TABLE_COLORS[normalizedName] || generateColor(tableName);
+                
+                // Obtener límites del mapa actual para filtrar datos
+                const bounds = map.getBounds();
+                const dataLimit = getDataLimit();
+                
+                const response = await fetch(`${SUPABASE_CONFIG.URL}/rest/v1/${tableName}?select=*&limit=${dataLimit}`, {
+                    headers: { 
+                        'apikey': SUPABASE_CONFIG.KEY, 
+                        'Authorization': `Bearer ${SUPABASE_CONFIG.KEY}` 
+                    }
+                });
+
+                if (!response.ok) throw new Error('Error al cargar datos');
+                
+                const data = await response.json();
+                
+                // Limpiar capa anterior si existe
+                if (layers[tableName]) {
+                    map.removeLayer(layers[tableName].layer);
+                }
+                
+                // Procesar datos geoespaciales
+                const geoJsonLayer = L.geoJSON(null, {
+                    pointToLayer: (feature, latlng) => {
+                        // Ajustar tamaño del marcador basado en el zoom
+                        const zoom = map.getZoom();
+                        const radius = Math.max(4, Math.min(12, zoom - 6));
+                        
+                        return L.circleMarker(latlng, {
+                            radius: radius,
+                            fillColor: color,
+                            color: '#fff',
+                            weight: 1,
+                            opacity: 1,
+                            fillOpacity: 0.8
+                        });
+                    },
+                    style: (feature) => {
+                        return {
+                            color: color,
+                            weight: 2,
+                            opacity: 0.8,
+                            fillOpacity: 0.4
+                        };
+                    },
+                    onEachFeature: (feature, layer) => {
+                        if (feature.properties) {
+                            let popupContent = `<div style="max-width:300px;"><h3 style="color:${color};margin-top:0;">${formatTableName(tableName)}</h3><table>`;
+                            for (const key in feature.properties) {
+                                if (feature.properties[key] && key.toLowerCase() !== 'geom') {
+                                    popupContent += `<tr><td><strong>${formatTableName(key)}:</strong></td><td>${feature.properties[key]}</td></tr>`;
+                                }
+                            }
+                            popupContent += '</table></div>';
+                            layer.bindPopup(popupContent);
+                        }
+                    }
+                });
+
+                // Procesar cada registro y filtrar por vista actual
+                let featureCount = 0;
+                let totalCount = 0;
+                
+                data.forEach(item => {
+                    totalCount++;
+                    if (item.geom) {
+                        try {
+                            const geometry = typeof item.geom === 'string' ? JSON.parse(item.geom) : item.geom;
+                            const feature = {
+                                type: 'Feature',
+                                properties: item,
+                                geometry: geometry
+                            };
+                            
+                            // Filtrar por vista actual del mapa si es un punto
+                            if (geometry.type === 'Point') {
+                                const [lng, lat] = geometry.coordinates;
+                                if (bounds.contains([lat, lng])) {
+                                    geoJsonLayer.addData(feature);
+                                    featureCount++;
+                                }
+                            } else {
+                                // Para geometrías no puntuales, agregar todas
+                                geoJsonLayer.addData(feature);
+                                featureCount++;
+                            }
+                        } catch (e) {
+                            console.error(`Error procesando geometría en ${tableName}:`, e);
+                        }
+                    }
+                });
+
+                // Añadir capa al mapa y guardar referencia
+                geoJsonLayer.addTo(map);
+                layers[tableName] = {
+                    layer: geoJsonLayer,
+                    color: color,
+                    count: featureCount,
+                    totalCount: totalCount
+                };
+                
+                // Actualizar contador en la interfaz
+                if (layerItem) {
+                    const countElement = layerItem.querySelector('.feature-count');
+                    if (countElement) {
+                        const displayText = featureCount < totalCount ? 
+                            `${featureCount.toLocaleString()} de ${totalCount.toLocaleString()} elementos` :
+                            `${featureCount.toLocaleString()} elementos`;
+                        countElement.textContent = displayText;
+                    }
+                }
+                
+                // Ajustar vista si hay datos y es la primera carga
+                if (featureCount > 0 && geoJsonLayer.getBounds().isValid() && !map.getBounds().intersects(geoJsonLayer.getBounds())) {
+                    map.fitBounds(geoJsonLayer.getBounds());
+                }
+                
+                const statusMessage = featureCount < totalCount ? 
+                    `${formatTableName(tableName)} cargada (${featureCount} de ${totalCount} elementos en vista)` :
+                    `${formatTableName(tableName)} cargada (${featureCount} elementos)`;
+                
+                updateStatus(statusMessage, true);
+                updateLegend();
+                
+            } catch (err) {
+                updateStatus(`Error al cargar ${tableName}: ${err.message}`, false);
+                console.error(err);
+            }
+        }
+
+        // Actualizar leyenda
+        function updateLegend() {
+            const legendContent = document.getElementById('legendContent');
+            legendContent.innerHTML = '';
+            
+            for (const tableName in layers) {
+                if (map.hasLayer(layers[tableName].layer)) {
+                    const legendItem = document.createElement('div');
+                    legendItem.className = 'legend-item';
+                    legendItem.innerHTML = `
+                        <div class="legend-color" style="background-color: ${layers[tableName].color}"></div>
+                        <span>${formatTableName(tableName)}</span>
+                    `;
+                    legendContent.appendChild(legendItem);
+                }
+            }
+        }
+
+        // Resetear vista al zoom inicial
+        function resetView() {
+            map.setView([-0.18303510643940463, -78.48376403749427], 12);
+        }
+
+        // Zoom a todas las capas visibles
+        function zoomToAllLayers() {
+            const bounds = new L.LatLngBounds();
+            let hasLayers = false;
+            
+            for (const tableName in layers) {
+                if (map.hasLayer(layers[tableName].layer)) {
+                    bounds.extend(layers[tableName].layer.getBounds());
+                    hasLayers = true;
+                }
+            }
+            
+            if (hasLayers) {
+                map.fitBounds(bounds);
+            } else {
+                resetView();
+            }
+        }
+
+        // Inicializar la aplicación al cargar la página
+        window.onload = function() {
+            initMap();
+            loadTables();
+        };
+    </script>
 </body>
 </html>
