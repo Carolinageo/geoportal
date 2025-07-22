@@ -4,9 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Geoportal Ministerio de Educación</title>
-    <!-- Leaflet CSS -->
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
-    <!-- Font Awesome para iconos -->
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <style>
         :root {
@@ -73,6 +71,37 @@
             padding-bottom: 15px;
             border-bottom: 1px solid #e0e6ed;
             margin-bottom: 15px;
+        }
+
+        .search-container {
+            margin-bottom: 15px;
+            display: flex;
+            gap: 5px;
+        }
+
+        .search-container input[type="text"] {
+            flex: 1;
+            padding: 8px;
+            border: 1px solid #ccc;
+            border-radius: 4px;
+            font-size: 14px;
+        }
+
+        .search-container button {
+            padding: 8px 12px;
+            background-color: var(--medu-primary);
+            color: white;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 14px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .search-container button:hover {
+            background-color: #004d22;
         }
         
         .map-container {
@@ -284,11 +313,16 @@
     <div class="main-container">
         <div class="sidebar">
             <div class="sidebar-header">
-                <h3>Capas Disponibles</h3>
+                <h3>CAPAS</h3>
                 <div class="status-indicator">
                     <div class="status-dot" id="statusDot"></div>
                     <span id="statusText">Conectando...</span>
                 </div>
+            </div>
+
+            <div class="search-container">
+                <input type="text" id="parroquiaSearchInput" placeholder="Buscar parroquia...">
+                <button onclick="searchParroquia()"><i class="fas fa-search"></i></button>
             </div>
             
             <div class="layer-list" id="layersList">
@@ -318,7 +352,6 @@
         </div>
     </div>
 
-    <!-- Leaflet JS -->
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
     <script>
         // Credenciales ocultas
@@ -331,6 +364,9 @@
         let map;
         let layers = {};
         let currentZoom = 12;
+        let searchResultLayer = null; // Para almacenar la capa de resultados de búsqueda de parroquias
+        let relatedLayersFromSearch = []; // Para almacenar capas relacionadas cargadas por una búsqueda de parroquia
+        let validTablesLoaded = []; // Para almacenar las tablas válidas cargadas desde Supabase
         
         // Paleta de colores institucionales MEdu con variaciones
         const TABLE_COLORS = {
@@ -343,7 +379,8 @@
             'rutas': '#E65100',        // Naranja
             'docentes': '#5D4037',     // Marrón
             'estudiantes': '#C2185B',   // Rosado
-            'circuitos': '#689F38'     // Verde claro
+            'circuitos': '#689F38',     // Verde claro
+            'parroquias': '#4A148C'     // Color específico para parroquias
         };
 
         // Inicialización del mapa
@@ -383,7 +420,7 @@
         // Función para cargar las tablas disponibles
         async function loadTables() {
             try {
-                updateStatus('Conectando con Supabase...');
+                updateStatus('Conectando con BDD');
                 
                 // Introspección GraphQL para obtener tablas
                 const gql = `{
@@ -413,7 +450,7 @@
                     .map(n => n.slice(0, -'Collection'.length));
 
                 if (candidates.length === 0) {
-                    throw new Error('No se encontraron tablas');
+                    throw new Error('No se encontraron capas');
                 }
 
                 // Validar tablas accesibles
@@ -431,10 +468,11 @@
                 }));
 
                 if (validTables.length === 0) {
-                    throw new Error('No hay tablas accesibles');
+                    throw new Error('No hay capas accesibles');
                 }
 
-                updateStatus(`${validTables.length} tablas disponibles`, true);
+                validTablesLoaded = validTables; // Almacenar las tablas válidas globalmente
+                updateStatus(`${validTables.length} capas disponibles`, true);
                 displayTables(validTables);
                 
             } catch (err) {
@@ -461,7 +499,7 @@
                 
                 layerItem.innerHTML = `
                     <div class="layer-header">
-                        <input type="checkbox" class="layer-toggle" checked 
+                        <input type="checkbox" class="layer-toggle"  
                                onclick="toggleLayer('${table}', this.checked)">
                         <div class="layer-color" style="background-color: ${color}"></div>
                         <div class="layer-name">${formatTableName(table)}</div>
@@ -505,15 +543,10 @@
         // Alternar visibilidad de capa
         function toggleLayer(tableName, isActive) {
             const layerItem = document.querySelector(`.layer-item[data-table-name="${tableName}"]`);
-            
+
             if (isActive) {
                 layerItem.classList.add('active');
-                if (!layers[tableName]) {
-                    loadLayerData(tableName);
-                } else {
-                    map.addLayer(layers[tableName].layer);
-                    updateLegend();
-                }
+                loadLayerData(tableName); // Load data only when checked
             } else {
                 layerItem.classList.remove('active');
                 if (layers[tableName]) {
@@ -533,6 +566,24 @@
                     loadLayerData(tableName);
                 }
             });
+        }
+
+        // Función para validar si un objeto de geometría GeoJSON es válido
+        function isValidGeoJSONGeometry(geometry) {
+            if (!geometry || typeof geometry !== 'object') {
+                console.warn("Geometría inválida: objeto nulo o no es un objeto", geometry);
+                return false;
+            }
+            if (!geometry.type || typeof geometry.type !== 'string') {
+                console.warn("Geometría inválida: falta el campo 'type' o no es una cadena", geometry);
+                return false;
+            }
+            if (!geometry.coordinates || !Array.isArray(geometry.coordinates)) {
+                console.warn("Geometría inválida: falta el campo 'coordinates' o no es un array", geometry);
+                return false;
+            }
+            // Podrías añadir validaciones más específicas para diferentes tipos (Point, LineString, Polygon)
+            return true;
         }
 
         // Calcular límite de elementos basado en el zoom
@@ -561,7 +612,7 @@
                     headers: { 
                         'apikey': SUPABASE_CONFIG.KEY, 
                         'Authorization': `Bearer ${SUPABASE_CONFIG.KEY}` 
-                    }
+                            }
                 });
 
                 if (!response.ok) throw new Error('Error al cargar datos');
@@ -620,27 +671,33 @@
                     if (item.geom) {
                         try {
                             const geometry = typeof item.geom === 'string' ? JSON.parse(item.geom) : item.geom;
-                            const feature = {
-                                type: 'Feature',
-                                properties: item,
-                                geometry: geometry
-                            };
-                            
-                            // Filtrar por vista actual del mapa si es un punto
-                            if (geometry.type === 'Point') {
-                                const [lng, lat] = geometry.coordinates;
-                                if (bounds.contains([lat, lng])) {
+                            if (isValidGeoJSONGeometry(geometry)) { // Validar la geometría
+                                const feature = {
+                                    type: 'Feature',
+                                    properties: item,
+                                    geometry: geometry
+                                };
+                                
+                                // Filtrar por vista actual del mapa si es un punto
+                                if (geometry.type === 'Point') {
+                                    const [lng, lat] = geometry.coordinates;
+                                    if (bounds.contains([lat, lng])) {
+                                        geoJsonLayer.addData(feature);
+                                        featureCount++;
+                                    }
+                                } else {
+                                    // Para geometrías no puntuales, agregar todas
                                     geoJsonLayer.addData(feature);
                                     featureCount++;
                                 }
                             } else {
-                                // Para geometrías no puntuales, agregar todas
-                                geoJsonLayer.addData(feature);
-                                featureCount++;
+                                console.warn(`Saltando geometría inválida en ${tableName} para el elemento:`, item);
                             }
                         } catch (e) {
-                            console.error(`Error procesando geometría en ${tableName}:`, e);
+                            console.error(`Error procesando geometría en ${tableName}:`, e, item);
                         }
+                    } else {
+                        console.warn(`Elemento de ${tableName} sin geometría:`, item);
                     }
                 });
 
@@ -682,11 +739,223 @@
             }
         }
 
+        // Función para buscar parroquia y sus datos relacionados
+        async function searchParroquia() {
+            const searchTerm = document.getElementById('parroquiaSearchInput').value.trim();
+            if (!searchTerm) {
+                alert('Por favor, ingrese un nombre de parroquia para buscar.');
+                return;
+            }
+
+            updateStatus(`Buscando parroquia "${searchTerm}" y contenido relacionado...`, true);
+
+            // Remover capa de resultados de búsqueda de parroquia anterior si existe
+            if (searchResultLayer) {
+                map.removeLayer(searchResultLayer);
+                searchResultLayer = null;
+            }
+
+            // Remover todas las capas relacionadas de búsquedas anteriores
+            relatedLayersFromSearch.forEach(layer => {
+                map.removeLayer(layer);
+            });
+            relatedLayersFromSearch = []; // Limpiar el array
+
+            try {
+                const response = await fetch(`${SUPABASE_CONFIG.URL}/rest/v1/parroquias?DPA_DESPAR=ilike.*${searchTerm}*&select=*`, {
+                    headers: {
+                        'apikey': SUPABASE_CONFIG.KEY,
+                        'Authorization': `Bearer ${SUPABASE_CONFIG.KEY}`
+                    }
+                });
+
+                if (!response.ok) throw new Error('Error al buscar parroquia.');
+                
+                const data = await response.json();
+
+                if (data.length === 0) {
+                    updateStatus(`No se encontraron resultados para "${searchTerm}".`, false);
+                    updateLegend();
+                    return;
+                }
+
+                const foundParish = data[0]; // Tomar la primera parroquia encontrada
+                // CAMBIO CLAVE AQUÍ: Usar DPA_PARROQ para la relación
+                const foundParishCode = foundParish.DPA_PARROQ; 
+                const foundParishName = foundParish.DPA_DESPAR;
+
+
+                const geoJsonResult = L.geoJSON(null, {
+                    style: (feature) => {
+                        return {
+                            color: TABLE_COLORS['parroquias'],
+                            weight: 3,
+                            opacity: 0.9,
+                            fillOpacity: 0.2,
+                            dashArray: '5, 5'
+                        };
+                    },
+                    onEachFeature: (feature, layer) => {
+                        if (feature.properties) {
+                            let popupContent = `<div style="max-width:300px;"><h4 style="color:${TABLE_COLORS['parroquias']};margin-top:0;">Parroquia: ${feature.properties.DPA_DESPAR}</h4><table>`;
+                            for (const key in feature.properties) {
+                                if (feature.properties[key] && key.toLowerCase() !== 'geom') {
+                                    popupContent += `<tr><td><strong>${formatTableName(key)}:</strong></td><td>${feature.properties[key]}</td></tr>`;
+                                }
+                            }
+                            popupContent += '</table></div>';
+                            layer.bindPopup(popupContent);
+                        }
+                    }
+                });
+
+                const parishGeometry = typeof foundParish.geom === 'string' ? JSON.parse(foundParish.geom) : foundParish.geom;
+                let allBounds = new L.LatLngBounds(); // Initialize allBounds here
+
+                if (isValidGeoJSONGeometry(parishGeometry)) {
+                    const parishFeature = {
+                        type: 'Feature',
+                        properties: foundParish,
+                        geometry: parishGeometry
+                    };
+                    geoJsonResult.addData(parishFeature);
+                    searchResultLayer = geoJsonResult.addTo(map);
+                    if (geoJsonResult.getBounds().isValid()) {
+                        allBounds.extend(geoJsonResult.getBounds());
+                    }
+                } else {
+                    console.error("Saltando geometría inválida para la parroquia encontrada:", foundParish);
+                    updateStatus(`Parroquia "${searchTerm}" encontrada, pero su geometría es inválida.`, false);
+                    updateLegend();
+                    return; // No proceder si la geometría principal de la parroquia es inválida
+                }
+
+                // Cargar y mostrar datos relacionados de otras tablas
+                const tablesToRelate = validTablesLoaded.filter(t => t !== 'parroquias');
+
+                for (const tableName of tablesToRelate) {
+                    // Pasar el código de la parroquia (foundParishCode) como filtro
+                    await loadAndDisplayRelatedData(tableName, foundParishCode, allBounds);
+                }
+
+                if (allBounds.isValid()) {
+                    map.fitBounds(allBounds.pad(0.1));
+                } else {
+                    updateStatus(`No se pudo enfocar la parroquia "${searchTerm}" ni datos relacionados.`, false);
+                }
+                
+                updateStatus(`Parroquia "${foundParishName}" y datos relacionados encontrados.`, true);
+                updateLegend();
+
+            } catch (err) {
+                updateStatus(`Error al buscar parroquia o datos relacionados: ${err.message}`, false);
+                console.error(err);
+            }
+        }
+
+        // Nueva función para cargar y mostrar datos relacionados
+        async function loadAndDisplayRelatedData(tableName, filterValue, boundsToExtend) {
+            try {
+                const normalizedName = tableName.toLowerCase().replace(/\s+/g, '_');
+                const color = TABLE_COLORS[normalizedName] || generateColor(tableName);
+
+                // CAMBIO CLAVE AQUÍ: Filtrar por DPA_PARROQ si la tabla tiene ese campo,
+                // de lo contrario, se podría considerar otra lógica o un mensaje de error.
+                // Para este caso, asumimos que DPA_PARROQ es el campo de relación para instituciones_educativas
+                const response = await fetch(`${SUPABASE_CONFIG.URL}/rest/v1/${tableName}?DPA_PARROQ=eq.${filterValue}&select=*`, {
+                    headers: {
+                        'apikey': SUPABASE_CONFIG.KEY,
+                        'Authorization': `Bearer ${SUPABASE_CONFIG.KEY}`
+                    }
+                });
+
+                if (!response.ok) throw new Error(`Error al cargar datos relacionados para ${tableName}.`);
+
+                const data = await response.json();
+
+                if (data.length === 0) {
+                    console.log(`No se encontraron datos relacionados en ${tableName} para DPA_PARROQ = ${filterValue}.`);
+                    return; // No data to display for this table
+                }
+
+                const geoJsonLayer = L.geoJSON(null, {
+                    pointToLayer: (feature, latlng) => {
+                        const zoom = map.getZoom();
+                        const radius = Math.max(4, Math.min(12, zoom - 6));
+
+                        return L.circleMarker(latlng, {
+                            radius: radius,
+                            fillColor: color,
+                            color: '#fff',
+                            weight: 1,
+                            opacity: 1,
+                            fillOpacity: 0.8
+                        });
+                    },
+                    style: (feature) => {
+                        return {
+                            color: color,
+                            weight: 2,
+                            opacity: 0.8,
+                            fillOpacity: 0.4
+                        };
+                    },
+                    onEachFeature: (feature, layer) => {
+                        if (feature.properties) {
+                            let popupContent = `<div style="max-width:300px;"><h3 style="color:${color};margin-top:0;">${formatTableName(tableName)}</h3><table>`;
+                            for (const key in feature.properties) {
+                                if (feature.properties[key] && key.toLowerCase() !== 'geom') {
+                                    popupContent += `<tr><td><strong>${formatTableName(key)}:</strong></td><td>${feature.properties[key]}</td></tr>`;
+                                }
+                            }
+                            popupContent += '</table></div>';
+                            layer.bindPopup(popupContent);
+                        }
+                    },
+                    tableName: tableName // Adjuntar el nombre de la tabla a las opciones de la capa
+                });
+
+                data.forEach(item => {
+                    if (item.geom) {
+                        try {
+                            const geometry = typeof item.geom === 'string' ? JSON.parse(item.geom) : item.geom;
+                            if (isValidGeoJSONGeometry(geometry)) { // Validar la geometría
+                                const feature = {
+                                    type: 'Feature',
+                                    properties: item,
+                                    geometry: geometry
+                                };
+                                geoJsonLayer.addData(feature);
+                                if (geoJsonLayer.getBounds().isValid()) { // Asegurarse de que la capa tenga límites válidos antes de extender
+                                    boundsToExtend.extend(geoJsonLayer.getBounds());
+                                }
+                            } else {
+                                console.warn(`Saltando geometría inválida en ${tableName} para el elemento:`, item);
+                            }
+                        } catch (e) {
+                            console.error(`Error procesando geometría en ${tableName} para datos relacionados:`, e, item);
+                        }
+                    } else {
+                        console.warn(`Elemento de ${tableName} sin geometría:`, item);
+                    }
+                });
+
+                geoJsonLayer.addTo(map);
+                relatedLayersFromSearch.push(geoJsonLayer); // Almacenar esta capa para gestionarla
+                updateStatus(`Cargados ${data.length} elementos de ${formatTableName(tableName)} relacionados.`, true);
+
+            } catch (err) {
+                updateStatus(`Error al cargar datos relacionados de ${tableName}: ${err.message}`, false);
+                console.error(err);
+            }
+        }
+
         // Actualizar leyenda
         function updateLegend() {
             const legendContent = document.getElementById('legendContent');
             legendContent.innerHTML = '';
             
+            // Leyenda para capas principales activas
             for (const tableName in layers) {
                 if (map.hasLayer(layers[tableName].layer)) {
                     const legendItem = document.createElement('div');
@@ -697,6 +966,34 @@
                     `;
                     legendContent.appendChild(legendItem);
                 }
+            }
+            // Leyenda para el resultado de búsqueda de parroquia
+            if (searchResultLayer && map.hasLayer(searchResultLayer)) {
+                const legendItem = document.createElement('div');
+                legendItem.className = 'legend-item';
+                legendItem.innerHTML = `
+                    <div class="legend-color" style="background-color: ${TABLE_COLORS['parroquias']}"></div>
+                    <span>Resultado de Búsqueda (Parroquia)</span>
+                `;
+                legendContent.appendChild(legendItem);
+            }
+            // Leyenda para capas relacionadas de la búsqueda
+            if (relatedLayersFromSearch.length > 0) {
+                const addedRelatedTables = new Set(); // Para evitar entradas duplicadas
+                relatedLayersFromSearch.forEach(layer => {
+                    if (layer.options && layer.options.tableName && !addedRelatedTables.has(layer.options.tableName)) {
+                        const normalizedName = layer.options.tableName.toLowerCase().replace(/\s+/g, '_');
+                        const color = TABLE_COLORS[normalizedName] || generateColor(layer.options.tableName);
+                        const legendItem = document.createElement('div');
+                        legendItem.className = 'legend-item';
+                        legendItem.innerHTML = `
+                            <div class="legend-color" style="background-color: ${color}"></div>
+                            <span>Relacionado (${formatTableName(layer.options.tableName)})</span>
+                        `;
+                        legendContent.appendChild(legendItem);
+                        addedRelatedTables.add(layer.options.tableName);
+                    }
+                });
             }
         }
 
@@ -710,15 +1007,28 @@
             const bounds = new L.LatLngBounds();
             let hasLayers = false;
             
+            // Capas principales
             for (const tableName in layers) {
                 if (map.hasLayer(layers[tableName].layer)) {
                     bounds.extend(layers[tableName].layer.getBounds());
                     hasLayers = true;
                 }
             }
+            // Capa de resultado de búsqueda de parroquia
+            if (searchResultLayer && map.hasLayer(searchResultLayer) && searchResultLayer.getBounds().isValid()) {
+                bounds.extend(searchResultLayer.getBounds());
+                hasLayers = true;
+            }
+            // Capas relacionadas de la búsqueda
+            relatedLayersFromSearch.forEach(layer => {
+                if (map.hasLayer(layer) && layer.getBounds().isValid()) {
+                    bounds.extend(layer.getBounds());
+                    hasLayers = true;
+                }
+            });
             
             if (hasLayers) {
-                map.fitBounds(bounds);
+                map.fitBounds(bounds.pad(0.1));
             } else {
                 resetView();
             }
